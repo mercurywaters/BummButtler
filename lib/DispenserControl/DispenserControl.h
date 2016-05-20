@@ -56,8 +56,34 @@ class DispenserControl
         inline bool isInMotion () const;
         inline bool isAtHome () const;
         inline bool isAtEnd () const;
-        inline unsigned int getMaxPosition () const;
+//        inline unsigned int getMaxPosition () const;
         inline unsigned int getCurrentPosition () const;
 };
+
+inline bool DispenserControl::isInMotion () const
+{
+    return inMotion;
+}
+
+inline bool DispenserControl::isAtHome () const
+{
+    return atHome;
+}
+
+inline bool DispenserControl::isAtEnd () const
+{
+    return atEnd;
+}
+
+//inline unsigned int DispenserControl::getMaxPosition () const
+//{
+//    return maximumNumberOfSteps;
+//}
+//
+inline unsigned int DispenserControl::getCurrentPosition () const
+{
+    return dispenserCurrentPosition;
+}
+
 
 #endif

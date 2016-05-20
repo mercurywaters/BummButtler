@@ -129,29 +129,3 @@ void DispenserControl::setListener ( DispenserControlListener * &_listener )
     listener = _listener;
 }
 
-inline bool DispenserControl::isInMotion () const
-{
-    return inMotion;
-}
-
-inline bool DispenserControl::isAtHome () const
-{
-    return atHome;
-}
-
-inline bool DispenserControl::isAtEnd () const
-{
-    return atEnd;
-}
-
-inline unsigned int DispenserControl::getMaxPosition () const
-{
-    return maximumNumberOfSteps;
-}
-
-inline unsigned int DispenserControl::getCurrentPosition () const
-{
-    return dispenserCurrentPosition;
-}
-
-

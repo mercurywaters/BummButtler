@@ -27,7 +27,7 @@ void atDebugLedTimer ()
         debugLed = 0;
     }
 }
-#define setupDebugLed() do{debugLedTimer.attach_us(atDebugLedTimer,250000);}while(0);
+#define setupDebugLed() do{debugLedTimer.attach_us(atDebugLedTimer,250000);}while(0)
 #else
 #define setupDebugLed()
 #endif
@@ -62,14 +62,9 @@ typedef enum
 
 ServiceStatus executeCommand ( char * jsonCommand, int commandLength, OrderManager * orderManager, PumpControl * pumpControl, HM11 * &ble, OrderQueue * orderQueue );
 
-//int SER_Pin = dataPin;   //pin 14 on the 75HC595
-//int RCLK_Pin = latchPin;  //pin 12 on the 75HC595
-//int SRCLK_Pin = clockPin; //pin 11 on the 75HC595
-// PumpControl ( 12, 11, 14 );
-
 #define BARVIS_COMMAND_SIZE    1024
-#define TOTAL_CUPS             4
-#define TOTAL_PUMPS            6
+#define TOTAL_CUPS             1
+#define TOTAL_PUMPS            22
 
 int sendBleATCommand ( HM11 * &ble, const char * command, char * &responseBuffer, const int bufferSize )
 {
@@ -80,23 +75,43 @@ int sendBleATCommand ( HM11 * &ble, const char * command, char * &responseBuffer
     return dataLength;
 }
 
+// ------------------- PIN Names and configuration for all the Pins used --------------- //
+
+#define BLE_TX  D1
+#define BLE_RX  D0
+
+// dataPin;     // 75HC595 Pin 14 - Blue
+// latchPin;    // 75HC595 Pin 12 - Green
+// clockPin;    // 75HC595 Pin 11 - Yellow
+// enablePin;   // 75HC595 Pin 13 - White
+// resetPin;    // 75HC595 Pin 10 - Grey/Gold
+#define PUMP_CONTROL_DATA   D2
+#define PUMP_CONTROL_LATCH  D3
+#define PUMP_CONTROL_CLOCK  D4
+#define PUMP_CONTROL_ENABLE D5
+#define PUMP_CONTROL_RESET  D6
+
+#define DISPENSER_CONTROL_HOME  D8
+#define DISPENSER_CONTROL_END   D9
+#define DISPENSER_MOTOR_STEP    D12
+#define DISPENSER_MOTOR_DIR     D11
+
+void pumpDurationsDebugString ( char * buffer, unsigned int * durations );
+
 int main ()
 {
-    setupDebugLed()
-    ;
+    setupDebugLed();
 
     USBSerial usbSerial ( USBTX, USBRX );
     SERIAL_DEBUG_OUT = &usbSerial;
 
-    PinName irSensorPins [ TOTAL_CUPS ] = { D14, D15, D16, D17 };
+//    PinName             irSensorPins [ TOTAL_CUPS ] = { D14, D15, D16, D17 };
 
-    PumpControl * pumpControl = new PumpControl ( D3, D2, D4, TOTAL_PUMPS );
+    PumpControl *       pumpControl         = new PumpControl ( PUMP_CONTROL_DATA, PUMP_CONTROL_LATCH, PUMP_CONTROL_CLOCK, PUMP_CONTROL_ENABLE, PUMP_CONTROL_RESET, TOTAL_PUMPS );
+    DispenserControl *  dispenserControl    = new DispenserControl ( DISPENSER_CONTROL_HOME, DISPENSER_CONTROL_END, DISPENSER_MOTOR_STEP, DISPENSER_MOTOR_DIR );
+    OrderQueue *        orderQueue          = new OrderQueue ( TOTAL_CUPS, TOTAL_PUMPS );
+    HM11 *              ble                 = new HM11 ( BLE_TX, BLE_RX );
 
-    DispenserControl * dispenserControl = new DispenserControl ( D8, D9, D12, D11 );
-
-    OrderQueue * orderQueue = new OrderQueue ( TOTAL_CUPS, TOTAL_PUMPS );
-
-    HM11 * ble = new HM11 ( D1, D0 );
     char * commandBuffer = new char [ BARVIS_COMMAND_SIZE ];
 
     sendBleATCommand ( ble, "AT", commandBuffer, BARVIS_COMMAND_SIZE );
@@ -105,34 +120,74 @@ int main ()
     sendBleATCommand ( ble, "AT+RESET", commandBuffer, BARVIS_COMMAND_SIZE );
     sendBleATCommand ( ble, "AT+SHOW1", commandBuffer, BARVIS_COMMAND_SIZE );
     sendBleATCommand ( ble, "AT+IMME1", commandBuffer, BARVIS_COMMAND_SIZE );
-    sendBleATCommand ( ble, "AT+NAMEBARVIS", commandBuffer, BARVIS_COMMAND_SIZE );
+    sendBleATCommand ( ble, "AT+NAMEBummButtler", commandBuffer, BARVIS_COMMAND_SIZE );
 
-    OrderManager * orderManager = new OrderManager ( TOTAL_CUPS, TOTAL_PUMPS, orderQueue, pumpControl, dispenserControl );
+//    OrderManager * orderManager = new OrderManager ( TOTAL_CUPS, TOTAL_PUMPS, orderQueue, pumpControl, dispenserControl );
 
-    while ( 1 )
+    unsigned int * testDurations = new unsigned int [ TOTAL_PUMPS ];
+    unsigned int * clearDurations = new unsigned int [ TOTAL_PUMPS ];
+
+    for ( int i = 0; i < TOTAL_PUMPS; i ++ )
+    {
+        testDurations [ i ] = 5 + i;
+        clearDurations [ i ] = 0;
+    }
+
+    char debugBuffer [ 256  ];
+
+    while ( true )
     {
 
-        if ( ble->isRxDataAvailable () )
-        {
-            int length = ble->copyAvailableDataToBufWithTimeout ( commandBuffer, BARVIS_COMMAND_SIZE, 10 );
-            debug( "Recieved from BLE: %s", commandBuffer );
-            ServiceStatus status = executeCommand ( commandBuffer, length, orderManager, pumpControl, ble, orderQueue );
-            status.toJsonString ( commandBuffer );
-            debug( commandBuffer );
-            ble->sendDataToDevice ( commandBuffer );
-        }
-        else if ( usbSerial.available () )
-        {
-            usbSerial.gets ( commandBuffer, BARVIS_COMMAND_SIZE );
-            debug( "Recieved from USB: %s", commandBuffer );
-            ServiceStatus status = executeCommand ( commandBuffer, strlen ( commandBuffer ), orderManager, pumpControl, ble, orderQueue );
-            status.toJsonString ( commandBuffer );
-            debug( commandBuffer );
-            ble->sendDataToDevice ( commandBuffer );
-        }
+//        if ( ble->isRxDataAvailable () )
+//        {
+//            int length = ble->copyAvailableDataToBufWithTimeout ( commandBuffer, BARVIS_COMMAND_SIZE, 10 );
+//            debug( "Recieved from BLE: %s", commandBuffer );
+//            ServiceStatus status = executeCommand ( commandBuffer, length, orderManager, pumpControl, ble, orderQueue );
+//            status.toJsonString ( commandBuffer );
+//            debug( commandBuffer );
+//            ble->sendDataToDevice ( commandBuffer );
+//        }
+//        else if ( usbSerial.available () )
+//        {
+//            usbSerial.gets ( commandBuffer, BARVIS_COMMAND_SIZE );
+//            debug( "Recieved from USB: %s", commandBuffer );
+//            ServiceStatus status = executeCommand ( commandBuffer, strlen ( commandBuffer ), orderManager, pumpControl, ble, orderQueue );
+//            status.toJsonString ( commandBuffer );
+//            debug( commandBuffer );
+//            ble->sendDataToDevice ( commandBuffer );
+//        }
+//
+//        wait_us ( 100000 );
 
-        wait_us ( 100000 );
+        wait (5);
+        pumpDurationsDebugString ( debugBuffer, testDurations );
+        debug ( "Running Pumps as: %s", debugBuffer );
+        pumpControl -> runPumpsFor ( testDurations );
+
+        wait ( 5 );
+        pumpControl -> pausePumps ();
+
+        wait ( 5 );
+        pumpControl -> resetPumps ();
+
+        wait ( 5 );
+        pumpControl -> resetPumps ();
     }
+}
+
+void pumpDurationsDebugString ( char * buffer, unsigned int * durations )
+{
+    int length = 0;
+    buffer [ length++ ] = '{';
+    buffer [ length++ ] = '[';
+    for ( unsigned int j = 0; j < TOTAL_PUMPS; j++ )
+    {
+        sprintf ( buffer + length, "(%3d)", durations [ j ] );
+        length += 5;
+    }
+    buffer [ length++ ] = ']';
+    buffer [ length++ ] = '}';
+    buffer [ length ] = '\0';
 }
 
 /*
