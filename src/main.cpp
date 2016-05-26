@@ -12,6 +12,7 @@
 #include "OrderQueue.h"
 #include "OrderManager.h"
 #include "USBSerial.h"
+#include "string.h"
 
 #ifdef USE_DEBUG_LED
 DigitalOut debugLed ( LED1 );
@@ -64,7 +65,7 @@ ServiceStatus executeCommand ( char * jsonCommand, int commandLength, OrderManag
 
 #define BARVIS_COMMAND_SIZE    1024
 #define TOTAL_CUPS             1
-#define TOTAL_PUMPS            22
+#define TOTAL_PUMPS            24
 
 int sendBleATCommand ( HM11 * &ble, const char * command, char * &responseBuffer, const int bufferSize )
 {
@@ -80,16 +81,11 @@ int sendBleATCommand ( HM11 * &ble, const char * command, char * &responseBuffer
 #define BLE_TX  D1
 #define BLE_RX  D0
 
-// dataPin;     // 75HC595 Pin 14 - Blue
-// latchPin;    // 75HC595 Pin 12 - Green
-// clockPin;    // 75HC595 Pin 11 - Yellow
-// enablePin;   // 75HC595 Pin 13 - White
-// resetPin;    // 75HC595 Pin 10 - Grey/Gold
-#define PUMP_CONTROL_DATA   D2
-#define PUMP_CONTROL_LATCH  D3
-#define PUMP_CONTROL_CLOCK  D4
-#define PUMP_CONTROL_ENABLE D5
-#define PUMP_CONTROL_RESET  D6
+#define PUMP_CONTROL_DATA   D2  // 75HC595 Pin 14 - Blue
+#define PUMP_CONTROL_LATCH  D3  // 75HC595 Pin 12 - Green
+#define PUMP_CONTROL_CLOCK  D4  // 75HC595 Pin 11 - Yellow
+#define PUMP_CONTROL_ENABLE D5  // 75HC595 Pin 13 - White
+#define PUMP_CONTROL_RESET  D6  // 75HC595 Pin 10 - Grey/Gold
 
 #define DISPENSER_CONTROL_HOME  D8
 #define DISPENSER_CONTROL_END   D9
@@ -97,6 +93,20 @@ int sendBleATCommand ( HM11 * &ble, const char * command, char * &responseBuffer
 #define DISPENSER_MOTOR_DIR     D11
 
 void pumpDurationsDebugString ( char * buffer, unsigned int * durations );
+
+void increment ( unsigned int * &array, const int index )
+{
+    if ( index >= 0 && index < TOTAL_PUMPS )
+    {
+        if ( array [ index ] == 0 ) {
+            array [ index ] = 1;
+        }
+        else {
+            array [ index ] = 0;
+            increment ( array, index + 1 );
+        }
+    }
+}
 
 int main ()
 {
@@ -122,56 +132,85 @@ int main ()
     sendBleATCommand ( ble, "AT+IMME1", commandBuffer, BARVIS_COMMAND_SIZE );
     sendBleATCommand ( ble, "AT+NAMEBummButtler", commandBuffer, BARVIS_COMMAND_SIZE );
 
-//    OrderManager * orderManager = new OrderManager ( TOTAL_CUPS, TOTAL_PUMPS, orderQueue, pumpControl, dispenserControl );
+    OrderManager * orderManager = new OrderManager ( TOTAL_CUPS, TOTAL_PUMPS, orderQueue, pumpControl, dispenserControl );
 
-    unsigned int * testDurations = new unsigned int [ TOTAL_PUMPS ];
-    unsigned int * clearDurations = new unsigned int [ TOTAL_PUMPS ];
-
-    for ( int i = 0; i < TOTAL_PUMPS; i ++ )
-    {
-        testDurations [ i ] = 5 + i;
-        clearDurations [ i ] = 0;
-    }
+//    unsigned int * testDurations = new unsigned int [ TOTAL_PUMPS ];
+//    for ( int i = 0; i < TOTAL_PUMPS; i ++ )
+//    {
+//        testDurations [ i ] = 0;
+//    }
+//    testDurations [ 7 ] = 1;
+//    testDurations [ 6 ] = 1;
+//    testDurations [ 5 ] = 1;
+//    testDurations [ 4 ] = 1;
+//    testDurations [ 3 ] = 1;
+//    testDurations [ 2 ] = 1;
 
     char debugBuffer [ 256  ];
 
+    int count = 0;
     while ( true )
     {
 
-//        if ( ble->isRxDataAvailable () )
-//        {
-//            int length = ble->copyAvailableDataToBufWithTimeout ( commandBuffer, BARVIS_COMMAND_SIZE, 10 );
-//            debug( "Recieved from BLE: %s", commandBuffer );
-//            ServiceStatus status = executeCommand ( commandBuffer, length, orderManager, pumpControl, ble, orderQueue );
-//            status.toJsonString ( commandBuffer );
-//            debug( commandBuffer );
-//            ble->sendDataToDevice ( commandBuffer );
-//        }
-//        else if ( usbSerial.available () )
-//        {
-//            usbSerial.gets ( commandBuffer, BARVIS_COMMAND_SIZE );
-//            debug( "Recieved from USB: %s", commandBuffer );
-//            ServiceStatus status = executeCommand ( commandBuffer, strlen ( commandBuffer ), orderManager, pumpControl, ble, orderQueue );
-//            status.toJsonString ( commandBuffer );
-//            debug( commandBuffer );
-//            ble->sendDataToDevice ( commandBuffer );
-//        }
-//
-//        wait_us ( 100000 );
+        if ( ble->isRxDataAvailable () )
+        {
+            int length = ble->copyAvailableDataToBufWithTimeout ( commandBuffer, BARVIS_COMMAND_SIZE, 10 );
+            ServiceStatus status = executeCommand ( commandBuffer, length, orderManager, pumpControl, ble, orderQueue );
+            status.toJsonString ( commandBuffer );
+            debug( commandBuffer );
+            ble->sendDataToDevice ( commandBuffer );
+        }
+        else if ( usbSerial.available () )
+        {
+            usbSerial.gets ( commandBuffer, BARVIS_COMMAND_SIZE );
+            ServiceStatus status = executeCommand ( commandBuffer, strlen ( commandBuffer ), orderManager, pumpControl, ble, orderQueue );
+            status.toJsonString ( commandBuffer );
+            debug( commandBuffer );
+            ble->sendDataToDevice ( commandBuffer );
+        }
 
-        wait (5);
-        pumpDurationsDebugString ( debugBuffer, testDurations );
-        debug ( "Running Pumps as: %s", debugBuffer );
-        pumpControl -> runPumpsFor ( testDurations );
+        wait_us ( 100000 );
 
+/*
+{"type":"PUMP","run_pumps":[{"id":1,"for":40},{"id":2,"for":60}]}
+    {\"type\":\"PUMP\",\"run_pumps\":[{\"id\":1,\"for\":40},{\"id\":2,\"for\":60}]}
+{"type":"CLEAR"}
+    {\"type\":\"CLEAR\"}
+{"type":"PAUSE"}
+    {\"type\":\"PAUSE\"}
+{"type":"RESUME"}
+    {\"type\":\"RESUME\"}
+*/
+
+        {
+        wait ( 2 );
+        strcpy ( commandBuffer, "{\"type\":\"PUMP\",\"run_pumps\":[{\"id\":1,\"for\":40},{\"id\":2,\"for\":60}]}" );
+        ServiceStatus status = executeCommand ( commandBuffer, strlen ( commandBuffer ), orderManager, pumpControl, ble, orderQueue );
+        status.toJsonString ( commandBuffer );
+        debug( commandBuffer );
+        }
+        {
+        wait ( 2 );
+        strcpy ( commandBuffer, "{\"type\":\"PAUSE\"}" );
+        ServiceStatus status = executeCommand ( commandBuffer, strlen ( commandBuffer ), orderManager, pumpControl, ble, orderQueue );
+        status.toJsonString ( commandBuffer );
+        debug( commandBuffer );
+        }
+        {
+        wait ( 2 );
+        strcpy ( commandBuffer, "{\"type\":\"RESUME\"}" );
+        ServiceStatus status = executeCommand ( commandBuffer, strlen ( commandBuffer ), orderManager, pumpControl, ble, orderQueue );
+        status.toJsonString ( commandBuffer );
+        debug( commandBuffer );
+        }
+        {
+        wait ( 2 );
+        strcpy ( commandBuffer, "{\"type\":\"CLEAR\"}" );
+        ServiceStatus status = executeCommand ( commandBuffer, strlen ( commandBuffer ), orderManager, pumpControl, ble, orderQueue );
+        status.toJsonString ( commandBuffer );
+        debug( commandBuffer );
+        }
         wait ( 5 );
-        pumpControl -> pausePumps ();
-
-        wait ( 5 );
-        pumpControl -> resetPumps ();
-
-        wait ( 5 );
-        pumpControl -> resetPumps ();
     }
 }
 
@@ -180,9 +219,9 @@ void pumpDurationsDebugString ( char * buffer, unsigned int * durations )
     int length = 0;
     buffer [ length++ ] = '{';
     buffer [ length++ ] = '[';
-    for ( unsigned int j = 0; j < TOTAL_PUMPS; j++ )
+    for ( int i = ( TOTAL_PUMPS - 1 ); i >= 0; i -- )
     {
-        sprintf ( buffer + length, "(%3d)", durations [ j ] );
+        sprintf ( buffer + length, "(%3d)", durations [ i ] );
         length += 5;
     }
     buffer [ length++ ] = ']';
@@ -206,6 +245,8 @@ void pumpDurationsDebugString ( char * buffer, unsigned int * durations )
 #define JSON_ENUM_TYPE_PUMP     "PUMP"
 #define JSON_ENUM_TYPE_SET      "SET"
 #define JSON_ENUM_TYPE_CLEAR    "CLEAR"
+#define JSON_ENUM_TYPE_PAUSE    "PAUSE"
+#define JSON_ENUM_TYPE_RESUME   "RESUME"
 #define JSON_ENUM_TYPE_AT       "AT"
 #define JSON_KEY_RUN_PUMPS      "run_pumps"
 #define JSON_KEY_RUN_PUMPS_ID   "id"
@@ -215,6 +256,8 @@ void pumpDurationsDebugString ( char * buffer, unsigned int * durations )
 
 ServiceStatus executeCommand ( char * jsonCommand, int commandLength, OrderManager * orderManager, PumpControl * pumpControl, HM11 * &ble, OrderQueue * orderQueue )
 {
+    debug( "Executing %s", jsonCommand );
+
     Json json ( jsonCommand, commandLength );
 
     if ( !json.isValidJson () )
@@ -325,27 +368,39 @@ ServiceStatus executeCommand ( char * jsonCommand, int commandLength, OrderManag
             runPumpsFor [ pumpId ] = (unsigned int) duration;
         }
 
-        orderManager->lock ();
-        // Queue the Pump Operation now
-        int currSize = orderQueue->addOrder ( runPumpsFor );
-        char debugBuffer [ 250 ];
-        orderQueue->print ( debugBuffer );
-        debug( debugBuffer );
-        orderManager->release ();
+        pumpControl -> runPumpsFor ( runPumpsFor );
 
-        if ( currSize > existingQueueSize )
-        {
-            return ServiceStatus ( SUCCESS, "Command queued at %d of %d", currSize, orderQueue->getCapacity () );
-        }
-        else
-        {
-            return ServiceStatus ( ERROR_ORDER_QUEUE_FULL, "Command NOT accepted. Orders exist %d of %d", currSize, orderQueue->getCapacity () );
-        }
+//        orderManager->lock ();
+//        // Queue the Pump Operation now
+//        int currSize = orderQueue->addOrder ( runPumpsFor );
+//        char debugBuffer [ 250 ];
+//        orderQueue->print ( debugBuffer );
+//        debug( debugBuffer );
+//        orderManager->release ();
+//
+//        if ( currSize > existingQueueSize )
+//        {
+//            return ServiceStatus ( SUCCESS, "Command queued at %d of %d", currSize, orderQueue->getCapacity () );
+//        }
+//        else
+//        {
+//            return ServiceStatus ( ERROR_ORDER_QUEUE_FULL, "Command NOT accepted. Orders exist %d of %d", currSize, orderQueue->getCapacity () );
+//        }
     }
     else if ( json.matches ( typeValueIndex, JSON_ENUM_TYPE_CLEAR ) )
     {
         pumpControl->resetPumps ();
         return ServiceStatus ( SUCCESS, "All Pumps reset" );
+    }
+    else if ( json.matches ( typeValueIndex, JSON_ENUM_TYPE_PAUSE ) )
+    {
+        pumpControl->pausePumps ();
+        return ServiceStatus ( SUCCESS, "Pumps Paused" );
+    }
+    else if ( json.matches ( typeValueIndex, JSON_ENUM_TYPE_RESUME ) )
+    {
+        pumpControl->resumePumps ();
+        return ServiceStatus ( SUCCESS, "Pumps Resumed" );
     }
     else if ( json.matches ( typeValueIndex, JSON_ENUM_TYPE_SET ) )
     {
