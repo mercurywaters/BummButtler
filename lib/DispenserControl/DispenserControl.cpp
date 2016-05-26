@@ -17,7 +17,7 @@ DispenserControl::DispenserControl ( const PinName homePin, const PinName endPin
     goToHome ();
 
     goToEnd ();
-    moveDispenserHead ( (maximumNumberOfSteps / 2), HOME );
+    moveDispenserHead ( ( maximumNumberOfSteps / 2 ), HOME );
 }
 
 DispenserControl::~DispenserControl ()
@@ -116,8 +116,9 @@ unsigned int DispenserControl::moveToPosition ( const unsigned int position )
         goToHome ();
         stepsTaken = moveDispenserHead ( position, END );
 
-        if ( listener != NULL ){
-            listener -> reachedToPosition ( position, stepsTaken );
+        if ( listener != NULL )
+        {
+            listener->reachedToPosition ( position, stepsTaken );
         }
     }
 

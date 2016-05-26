@@ -1,19 +1,20 @@
 #ifndef COMMONS_SERVICESTATUS_H_
 #define COMMONS_SERVICESTATUS_H_
 
-#define MAX_STATUS_MESSAGE_LENGTH   100
-
 class ServiceStatus
 {
     private:
+        static const int MAX_STATUS_MESSAGE_LENGTH;
         int statusCode;
-        char message [ MAX_STATUS_MESSAGE_LENGTH ];
-
-    public:
-        ServiceStatus ( const int code, const char* format ... );
+        char * message;
 
         ServiceStatus ( const ServiceStatus &other );
 
+    public:
+        ServiceStatus ( const int code, const char* format ... );
+        virtual ~ServiceStatus ();
+
+        ServiceStatus * status ( const int code, const char * format ... );
         inline const char * getMessage () const;
         inline int getCode () const;
         inline char * toJsonString ( char * buffer ) const;

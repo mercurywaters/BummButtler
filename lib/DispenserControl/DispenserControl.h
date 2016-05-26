@@ -85,5 +85,4 @@ inline unsigned int DispenserControl::getCurrentPosition () const
     return dispenserCurrentPosition;
 }
 
-
 #endif

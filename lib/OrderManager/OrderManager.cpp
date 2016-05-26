@@ -52,9 +52,9 @@ void OrderManager::executeNextOrder ()
 //            if ( dispenserControl -> moveToCup ( nextCupIndex ) ) {
 //            if ( dispenserControl->isCupPresent ( nextCupIndex ) )
 //            {
-                orderQueue->removeOrder ( durations );
-                pumpControl->runPumpsFor ( durations );
-                currCupIndex = nextCupIndex;
+            orderQueue->removeOrder ( durations );
+            pumpControl->runPumpsFor ( durations );
+            currCupIndex = nextCupIndex;
 //            }
 //            }
         }

@@ -130,7 +130,6 @@ inline bool Json::tokenBooleanValue ( const int tokenIndex ) const
     return false;
 }
 
-
 // void Json::print () const
 // {
 //     #ifdef SOFTWARE_DEBUG

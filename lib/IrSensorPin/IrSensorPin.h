@@ -24,7 +24,7 @@ class IrSensorPin : private InterruptIn
         void pinStateChanged ();
 
     public:
-        IrSensorPin ( const PinName _pinName, const int _pinId, IrSensorListener * &_listener );
+        IrSensorPin ( const PinName _pinName, const int _pinId, IrSensorListener * _listener = NULL );
         virtual ~IrSensorPin ();
 };
 

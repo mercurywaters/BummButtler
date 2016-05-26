@@ -67,7 +67,7 @@
  *  @class BufferedSerial
  *  @brief Software buffers and interrupt driven tx and rx for Serial
  */
-class BufferedSerial: public RawSerial
+class BufferedSerial : public RawSerial
 {
     private:
         Buffer <char> rxbuf;

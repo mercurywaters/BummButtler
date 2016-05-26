@@ -61,7 +61,7 @@ typedef enum
     ERROR_ORDER_QUEUE_FULL = ( ERROR_ORDER | 0x01 ),
 } StatusCode;
 
-ServiceStatus executeCommand ( char * jsonCommand, int commandLength, OrderManager * orderManager, PumpControl * pumpControl, HM11 * &ble, OrderQueue * orderQueue );
+ServiceStatus * executeCommand ( char * jsonCommand, int commandLength, OrderManager * orderManager, PumpControl * pumpControl, HM11 * &ble, OrderQueue * orderQueue );
 
 #define BARVIS_COMMAND_SIZE    1024
 #define TOTAL_CUPS             1
@@ -81,11 +81,12 @@ int sendBleATCommand ( HM11 * &ble, const char * command, char * &responseBuffer
 #define BLE_TX  D1
 #define BLE_RX  D0
 
-#define PUMP_CONTROL_DATA   D2  // 75HC595 Pin 14 - Blue
-#define PUMP_CONTROL_LATCH  D3  // 75HC595 Pin 12 - Green
-#define PUMP_CONTROL_CLOCK  D4  // 75HC595 Pin 11 - Yellow
-#define PUMP_CONTROL_ENABLE D5  // 75HC595 Pin 13 - White
-#define PUMP_CONTROL_RESET  D6  // 75HC595 Pin 10 - Grey/Gold
+#define PUMP_CONTROL_DATA           D2  // 75HC595 Pin 14 - Blue
+#define PUMP_CONTROL_LATCH          D3  // 75HC595 Pin 12 - Green
+#define PUMP_CONTROL_CLOCK          D4  // 75HC595 Pin 11 - Yellow
+#define PUMP_CONTROL_ENABLE         D5  // 75HC595 Pin 13 - White
+#define PUMP_CONTROL_RESET          D6  // 75HC595 Pin 10 - Grey/Gold
+#define PUMP_CONTROL_CUP_DETECTOR   D14 // IR Sensor Pin0
 
 #define DISPENSER_CONTROL_HOME  D8
 #define DISPENSER_CONTROL_END   D9
@@ -98,10 +99,12 @@ void increment ( unsigned int * &array, const int index )
 {
     if ( index >= 0 && index < TOTAL_PUMPS )
     {
-        if ( array [ index ] == 0 ) {
+        if ( array [ index ] == 0 )
+        {
             array [ index ] = 1;
         }
-        else {
+        else
+        {
             array [ index ] = 0;
             increment ( array, index + 1 );
         }
@@ -110,17 +113,19 @@ void increment ( unsigned int * &array, const int index )
 
 int main ()
 {
-    setupDebugLed();
+    setupDebugLed()
+    ;
 
     USBSerial usbSerial ( USBTX, USBRX );
     SERIAL_DEBUG_OUT = &usbSerial;
 
 //    PinName             irSensorPins [ TOTAL_CUPS ] = { D14, D15, D16, D17 };
 
-    PumpControl *       pumpControl         = new PumpControl ( PUMP_CONTROL_DATA, PUMP_CONTROL_LATCH, PUMP_CONTROL_CLOCK, PUMP_CONTROL_ENABLE, PUMP_CONTROL_RESET, TOTAL_PUMPS );
-    DispenserControl *  dispenserControl    = new DispenserControl ( DISPENSER_CONTROL_HOME, DISPENSER_CONTROL_END, DISPENSER_MOTOR_STEP, DISPENSER_MOTOR_DIR );
-    OrderQueue *        orderQueue          = new OrderQueue ( TOTAL_CUPS, TOTAL_PUMPS );
-    HM11 *              ble                 = new HM11 ( BLE_TX, BLE_RX );
+    PumpControl * pumpControl = new PumpControl ( PUMP_CONTROL_DATA, PUMP_CONTROL_LATCH, PUMP_CONTROL_CLOCK, PUMP_CONTROL_ENABLE, PUMP_CONTROL_RESET, TOTAL_PUMPS );
+    DispenserControl * dispenserControl = new DispenserControl ( DISPENSER_CONTROL_HOME, DISPENSER_CONTROL_END, DISPENSER_MOTOR_STEP, DISPENSER_MOTOR_DIR );
+    OrderQueue * orderQueue = new OrderQueue ( TOTAL_CUPS, TOTAL_PUMPS );
+    HM11 * ble = new HM11 ( BLE_TX, BLE_RX );
+    IrSensorPin * cupDetectorPin = new IrSensorPin ( PUMP_CONTROL_CUP_DETECTOR, 0, pumpControl );
 
     char * commandBuffer = new char [ BARVIS_COMMAND_SIZE ];
 
@@ -134,6 +139,8 @@ int main ()
 
     OrderManager * orderManager = new OrderManager ( TOTAL_CUPS, TOTAL_PUMPS, orderQueue, pumpControl, dispenserControl );
 
+    ServiceStatus * status = NULL;
+
 //    unsigned int * testDurations = new unsigned int [ TOTAL_PUMPS ];
 //    for ( int i = 0; i < TOTAL_PUMPS; i ++ )
 //    {
@@ -146,7 +153,7 @@ int main ()
 //    testDurations [ 3 ] = 1;
 //    testDurations [ 2 ] = 1;
 
-    char debugBuffer [ 256  ];
+    char debugBuffer [ 256 ];
 
     int count = 0;
     while ( true )
@@ -155,60 +162,60 @@ int main ()
         if ( ble->isRxDataAvailable () )
         {
             int length = ble->copyAvailableDataToBufWithTimeout ( commandBuffer, BARVIS_COMMAND_SIZE, 10 );
-            ServiceStatus status = executeCommand ( commandBuffer, length, orderManager, pumpControl, ble, orderQueue );
-            status.toJsonString ( commandBuffer );
+            status = executeCommand ( commandBuffer, length, orderManager, pumpControl, ble, orderQueue );
+            status -> toJsonString ( commandBuffer );
             debug( commandBuffer );
             ble->sendDataToDevice ( commandBuffer );
         }
         else if ( usbSerial.available () )
         {
             usbSerial.gets ( commandBuffer, BARVIS_COMMAND_SIZE );
-            ServiceStatus status = executeCommand ( commandBuffer, strlen ( commandBuffer ), orderManager, pumpControl, ble, orderQueue );
-            status.toJsonString ( commandBuffer );
+            status = executeCommand ( commandBuffer, strlen ( commandBuffer ), orderManager, pumpControl, ble, orderQueue );
+            status -> toJsonString ( commandBuffer );
             debug( commandBuffer );
             ble->sendDataToDevice ( commandBuffer );
         }
 
         wait_us ( 100000 );
 
-/*
-{"type":"PUMP","run_pumps":[{"id":1,"for":40},{"id":2,"for":60}]}
-    {\"type\":\"PUMP\",\"run_pumps\":[{\"id\":1,\"for\":40},{\"id\":2,\"for\":60}]}
-{"type":"CLEAR"}
-    {\"type\":\"CLEAR\"}
-{"type":"PAUSE"}
-    {\"type\":\"PAUSE\"}
-{"type":"RESUME"}
-    {\"type\":\"RESUME\"}
-*/
+        /*
+         {"type":"PUMP","run_pumps":[{"id":1,"for":40},{"id":2,"for":60}]}
+         {\"type\":\"PUMP\",\"run_pumps\":[{\"id\":1,\"for\":40},{\"id\":2,\"for\":60}]}
+         {"type":"CLEAR"}
+         {\"type\":\"CLEAR\"}
+         {"type":"PAUSE"}
+         {\"type\":\"PAUSE\"}
+         {"type":"RESUME"}
+         {\"type\":\"RESUME\"}
+         */
 
         {
-        wait ( 2 );
-        strcpy ( commandBuffer, "{\"type\":\"PUMP\",\"run_pumps\":[{\"id\":1,\"for\":40},{\"id\":2,\"for\":60}]}" );
-        ServiceStatus status = executeCommand ( commandBuffer, strlen ( commandBuffer ), orderManager, pumpControl, ble, orderQueue );
-        status.toJsonString ( commandBuffer );
-        debug( commandBuffer );
+            wait ( 2 );
+            strcpy ( commandBuffer, "{\"type\":\"PUMP\",\"run_pumps\":[{\"id\":1,\"for\":40},{\"id\":2,\"for\":60}]}" );
+            status = executeCommand ( commandBuffer, strlen ( commandBuffer ), orderManager, pumpControl, ble, orderQueue );
+            status -> toJsonString ( commandBuffer );
+            debug( commandBuffer );
         }
         {
-        wait ( 2 );
-        strcpy ( commandBuffer, "{\"type\":\"PAUSE\"}" );
-        ServiceStatus status = executeCommand ( commandBuffer, strlen ( commandBuffer ), orderManager, pumpControl, ble, orderQueue );
-        status.toJsonString ( commandBuffer );
-        debug( commandBuffer );
+            wait ( 2 );
+            strcpy ( commandBuffer, "{\"type\":\"PAUSE\"}" );
+            status = executeCommand ( commandBuffer, strlen ( commandBuffer ), orderManager, pumpControl, ble, orderQueue );
+            status -> toJsonString ( commandBuffer );
+            debug( commandBuffer );
         }
         {
-        wait ( 2 );
-        strcpy ( commandBuffer, "{\"type\":\"RESUME\"}" );
-        ServiceStatus status = executeCommand ( commandBuffer, strlen ( commandBuffer ), orderManager, pumpControl, ble, orderQueue );
-        status.toJsonString ( commandBuffer );
-        debug( commandBuffer );
+            wait ( 2 );
+            strcpy ( commandBuffer, "{\"type\":\"RESUME\"}" );
+            status = executeCommand ( commandBuffer, strlen ( commandBuffer ), orderManager, pumpControl, ble, orderQueue );
+            status -> toJsonString ( commandBuffer );
+            debug( commandBuffer );
         }
         {
-        wait ( 2 );
-        strcpy ( commandBuffer, "{\"type\":\"CLEAR\"}" );
-        ServiceStatus status = executeCommand ( commandBuffer, strlen ( commandBuffer ), orderManager, pumpControl, ble, orderQueue );
-        status.toJsonString ( commandBuffer );
-        debug( commandBuffer );
+            wait ( 2 );
+            strcpy ( commandBuffer, "{\"type\":\"CLEAR\"}" );
+            status = executeCommand ( commandBuffer, strlen ( commandBuffer ), orderManager, pumpControl, ble, orderQueue );
+            status -> toJsonString ( commandBuffer );
+            debug( commandBuffer );
         }
         wait ( 5 );
     }
@@ -219,7 +226,7 @@ void pumpDurationsDebugString ( char * buffer, unsigned int * durations )
     int length = 0;
     buffer [ length++ ] = '{';
     buffer [ length++ ] = '[';
-    for ( int i = ( TOTAL_PUMPS - 1 ); i >= 0; i -- )
+    for ( int i = ( TOTAL_PUMPS - 1 ); i >= 0; i-- )
     {
         sprintf ( buffer + length, "(%3d)", durations [ i ] );
         length += 5;
@@ -254,38 +261,40 @@ void pumpDurationsDebugString ( char * buffer, unsigned int * durations )
 #define JSON_KEY_AT_CMD         "at_cmd"
 #define JSON_KEY_SET            "set"
 
-ServiceStatus executeCommand ( char * jsonCommand, int commandLength, OrderManager * orderManager, PumpControl * pumpControl, HM11 * &ble, OrderQueue * orderQueue )
+ServiceStatus * executeCommand ( char * jsonCommand, int commandLength, OrderManager * orderManager, PumpControl * pumpControl, HM11 * &ble, OrderQueue * orderQueue )
 {
+    static ServiceStatus * serviceStatus = new ServiceStatus ( SUCCESS, "Nothing executed and no error occurred" );
+
     debug( "Executing %s", jsonCommand );
 
     Json json ( jsonCommand, commandLength );
 
     if ( !json.isValidJson () )
     {
-        return ServiceStatus ( ERROR_JSON_INVALID_OBJECT, "Invalid JSON ... structure is not a JSON Object" );
+        return serviceStatus -> status ( ERROR_JSON_INVALID_OBJECT, "Invalid JSON ... structure is not a JSON Object" );
     }
 
     if ( json.type ( JSON_ROOT_INDEX ) != JSMN_OBJECT )
     { // outher object
-        return ServiceStatus ( ERROR_JSON_INVALID_OBJECT, "Invalid JSON ... structure is not a JSON Object" );
+        return serviceStatus -> status ( ERROR_JSON_INVALID_OBJECT, "Invalid JSON ... structure is not a JSON Object" );
     }
 
     int typeIndex = json.findKeyIndexIn ( JSON_KEY_TYPE, JSON_ROOT_INDEX );
     if ( typeIndex == -1 )
     {
-        return ServiceStatus ( ERROR_JSON_MISSING_ATTRIBUTE, "Invalid JSON ... '%s' does not exist as root attribute", JSON_KEY_TYPE );
+        return serviceStatus -> status ( ERROR_JSON_MISSING_ATTRIBUTE, "Invalid JSON ... '%s' does not exist as root attribute", JSON_KEY_TYPE );
     }
 
     // compare with the 'value' of the Key ... i.e. ( typeIndex + 1 )
     int typeValueIndex = json.findChildIndexOf ( typeIndex, -1 );
     if ( typeValueIndex == -1 )
     {
-        return ServiceStatus ( ERROR_JSON_MISSING_ATTRIBUTE, "Invalid JSON ... '%s' should have a value", JSON_KEY_TYPE );
+        return serviceStatus -> status ( ERROR_JSON_MISSING_ATTRIBUTE, "Invalid JSON ... '%s' should have a value", JSON_KEY_TYPE );
     }
 
     if ( json.matches ( typeValueIndex, JSON_ENUM_TYPE_PING ) )
     {
-        return ServiceStatus ( SUCCESS, "PONG" );
+        return serviceStatus -> status ( SUCCESS, "PONG" );
     }
     else if ( json.matches ( typeValueIndex, JSON_ENUM_TYPE_PUMP ) )
     {
@@ -293,17 +302,17 @@ ServiceStatus executeCommand ( char * jsonCommand, int commandLength, OrderManag
         int runPumpsIndex = json.findKeyIndexIn ( JSON_KEY_RUN_PUMPS, JSON_ROOT_INDEX );
         if ( runPumpsIndex == -1 )
         {
-            return ServiceStatus ( ERROR_JSON_INVALID_OBJECT, "Invalid JSON ... '%s' should exist", JSON_KEY_RUN_PUMPS );
+            return serviceStatus -> status ( ERROR_JSON_INVALID_OBJECT, "Invalid JSON ... '%s' should exist", JSON_KEY_RUN_PUMPS );
         }
 
         int runPumpsArrayIndex = json.findChildIndexOf ( runPumpsIndex, 0 ); // get the first child i.e. value of the "run_pumps" KEY
         if ( runPumpsArrayIndex == -1 )
         {
-            return ServiceStatus ( ERROR_JSON_MISSING_ATTRIBUTE, "Invalid JSON ... '%s' should have an array element", JSON_KEY_RUN_PUMPS );
+            return serviceStatus -> status ( ERROR_JSON_MISSING_ATTRIBUTE, "Invalid JSON ... '%s' should have an array element", JSON_KEY_RUN_PUMPS );
         }
         if ( json.type ( runPumpsArrayIndex ) != JSMN_ARRAY )
         {
-            return ServiceStatus ( ERROR_JSON_INVALID_VALUE_TYPE, "Invalid JSON ... '%s' arry should be none other than array type", JSON_KEY_RUN_PUMPS );
+            return serviceStatus -> status ( ERROR_JSON_INVALID_VALUE_TYPE, "Invalid JSON ... '%s' arry should be none other than array type", JSON_KEY_RUN_PUMPS );
         }
 
         const int existingQueueSize = orderQueue->size ();
@@ -317,90 +326,90 @@ ServiceStatus executeCommand ( char * jsonCommand, int commandLength, OrderManag
             childIndex = json.findChildIndexOf ( runPumpsArrayIndex, childIndex );
             if ( json.type ( childIndex ) != JSMN_OBJECT )
             {
-                return ServiceStatus ( ERROR_JSON_INVALID_VALUE_TYPE, "Invalid JSON ... '%s' array should have all 'object' elements", JSON_KEY_RUN_PUMPS );
+                return serviceStatus -> status ( ERROR_JSON_INVALID_VALUE_TYPE, "Invalid JSON ... '%s' array should have all 'object' elements", JSON_KEY_RUN_PUMPS );
             }
 
             int idIndex = json.findKeyIndexIn ( JSON_KEY_RUN_PUMPS_ID, childIndex );
             if ( idIndex == -1 )
             {
-                return ServiceStatus ( ERROR_JSON_MISSING_ATTRIBUTE, "Invalid JSON ... object at %d is missing '%s' key", i, JSON_KEY_RUN_PUMPS_ID );
+                return serviceStatus -> status ( ERROR_JSON_MISSING_ATTRIBUTE, "Invalid JSON ... object at %d is missing '%s' key", i, JSON_KEY_RUN_PUMPS_ID );
             }
 
             int durationIndex = json.findKeyIndexIn ( JSON_KEY_RUN_PUMPS_FOR, childIndex );
             if ( durationIndex == -1 )
             {
-                return ServiceStatus ( ERROR_JSON_MISSING_ATTRIBUTE, "Invalid JSON ... object at %d is missing '%s' key", i, JSON_KEY_RUN_PUMPS_FOR );
+                return serviceStatus -> status ( ERROR_JSON_MISSING_ATTRIBUTE, "Invalid JSON ... object at %d is missing '%s' key", i, JSON_KEY_RUN_PUMPS_FOR );
             }
             // Now as we have both the keys of 'id' and 'for', get the values out
 
             int idValueIndex = json.findChildIndexOf ( idIndex, 0 );
             if ( idValueIndex == -1 )
             {
-                return ServiceStatus ( ERROR_JSON_INVALID_VALUE_TYPE, "Invalid JSON ... object at %d: '&s' value is missing", i, JSON_KEY_RUN_PUMPS_ID );
+                return serviceStatus -> status ( ERROR_JSON_INVALID_VALUE_TYPE, "Invalid JSON ... object at %d: '&s' value is missing", i, JSON_KEY_RUN_PUMPS_ID );
             }
             if ( ( json.type ( idValueIndex ) != JSMN_PRIMITIVE ) )
             {
-                return ServiceStatus ( ERROR_JSON_INVALID_VALUE_TYPE, "Invalid JSON ... object at %d: '%s' should have integer value", i, JSON_KEY_RUN_PUMPS_ID );
+                return serviceStatus -> status ( ERROR_JSON_INVALID_VALUE_TYPE, "Invalid JSON ... object at %d: '%s' should have integer value", i, JSON_KEY_RUN_PUMPS_ID );
             }
 
             int durationValueIndex = json.findChildIndexOf ( durationIndex, 0 );
             if ( durationValueIndex == -1 )
             {
-                return ServiceStatus ( ERROR_JSON_INVALID_VALUE_TYPE, "Invalid JSON ... object at %d: '&s' value is missing", i, JSON_KEY_RUN_PUMPS_FOR );
+                return serviceStatus -> status ( ERROR_JSON_INVALID_VALUE_TYPE, "Invalid JSON ... object at %d: '&s' value is missing", i, JSON_KEY_RUN_PUMPS_FOR );
             }
             if ( json.type ( durationValueIndex ) != JSMN_PRIMITIVE )
             {
-                return ServiceStatus ( ERROR_JSON_INVALID_VALUE_TYPE, "Invalid JSON ... object at %d: '%s' should have integer value", i, JSON_KEY_RUN_PUMPS_FOR );
+                return serviceStatus -> status ( ERROR_JSON_INVALID_VALUE_TYPE, "Invalid JSON ... object at %d: '%s' should have integer value", i, JSON_KEY_RUN_PUMPS_FOR );
             }
 
             int pumpId = json.tokenIntegerValue ( idValueIndex );
             if ( !pumpControl->isValidId ( pumpId ) )
             {
-                return ServiceStatus ( ERROR_PUMP_INVALID_ID, "Invalid ID: %d provided for Instruction: %d", pumpId, i );
+                return serviceStatus -> status ( ERROR_PUMP_INVALID_ID, "Invalid ID: %d provided for Instruction: %d", pumpId, i );
             }
 
             int duration = json.tokenIntegerValue ( durationValueIndex );
             if ( !pumpControl->isValidDuration ( duration ) )
             {
-                return ServiceStatus ( ERROR_PUMP_INVALID_DURATION, "Invalid Duration: %d provided for Instruction: %d", duration, i );
+                return serviceStatus -> status ( ERROR_PUMP_INVALID_DURATION, "Invalid Duration: %d provided for Instruction: %d", duration, i );
             }
 
             runPumpsFor [ pumpId ] = (unsigned int) duration;
         }
 
-        pumpControl -> runPumpsFor ( runPumpsFor );
+//        pumpControl -> runPumpsFor ( runPumpsFor );
 
-//        orderManager->lock ();
-//        // Queue the Pump Operation now
-//        int currSize = orderQueue->addOrder ( runPumpsFor );
-//        char debugBuffer [ 250 ];
-//        orderQueue->print ( debugBuffer );
-//        debug( debugBuffer );
-//        orderManager->release ();
-//
-//        if ( currSize > existingQueueSize )
-//        {
-//            return ServiceStatus ( SUCCESS, "Command queued at %d of %d", currSize, orderQueue->getCapacity () );
-//        }
-//        else
-//        {
-//            return ServiceStatus ( ERROR_ORDER_QUEUE_FULL, "Command NOT accepted. Orders exist %d of %d", currSize, orderQueue->getCapacity () );
-//        }
+        orderManager->lock ();
+        // Queue the Pump Operation now
+        int currSize = orderQueue->addOrder ( runPumpsFor );
+        char debugBuffer [ 250 ];
+        orderQueue->print ( debugBuffer );
+        debug( debugBuffer );
+        orderManager->release ();
+
+        if ( currSize > existingQueueSize )
+        {
+            return serviceStatus -> status ( SUCCESS, "Command queued at %d of %d", currSize, orderQueue->getCapacity () );
+        }
+        else
+        {
+            return serviceStatus -> status ( ERROR_ORDER_QUEUE_FULL, "Command NOT accepted. Orders exist %d of %d", currSize, orderQueue->getCapacity () );
+        }
     }
     else if ( json.matches ( typeValueIndex, JSON_ENUM_TYPE_CLEAR ) )
     {
         pumpControl->resetPumps ();
-        return ServiceStatus ( SUCCESS, "All Pumps reset" );
+        return serviceStatus -> status ( SUCCESS, "All Pumps reset" );
     }
     else if ( json.matches ( typeValueIndex, JSON_ENUM_TYPE_PAUSE ) )
     {
         pumpControl->pausePumps ();
-        return ServiceStatus ( SUCCESS, "Pumps Paused" );
+        return serviceStatus -> status ( SUCCESS, "Pumps Paused" );
     }
     else if ( json.matches ( typeValueIndex, JSON_ENUM_TYPE_RESUME ) )
     {
         pumpControl->resumePumps ();
-        return ServiceStatus ( SUCCESS, "Pumps Resumed" );
+        return serviceStatus -> status ( SUCCESS, "Pumps Resumed" );
     }
     else if ( json.matches ( typeValueIndex, JSON_ENUM_TYPE_SET ) )
     {
@@ -411,13 +420,13 @@ ServiceStatus executeCommand ( char * jsonCommand, int commandLength, OrderManag
         int atCmdIndex = json.findKeyIndexIn ( JSON_KEY_AT_CMD, JSON_ROOT_INDEX );
         if ( atCmdIndex == -1 )
         {
-            return ServiceStatus ( ERROR_JSON_INVALID_OBJECT, "Invalid JSON ... '%s' should exist", JSON_KEY_AT_CMD );
+            return serviceStatus -> status ( ERROR_JSON_INVALID_OBJECT, "Invalid JSON ... '%s' should exist", JSON_KEY_AT_CMD );
         }
 
         int atCmdValueIndex = json.findChildIndexOf ( atCmdIndex, -1 );
         if ( atCmdValueIndex == -1 )
         {
-            return ServiceStatus ( ERROR_JSON_MISSING_ATTRIBUTE, "Invalid JSON ... '%s' can't have empty value", JSON_KEY_AT_CMD );
+            return serviceStatus -> status ( ERROR_JSON_MISSING_ATTRIBUTE, "Invalid JSON ... '%s' can't have empty value", JSON_KEY_AT_CMD );
         }
 
         int cmdLen = json.tokenLength ( atCmdValueIndex );
@@ -426,11 +435,11 @@ ServiceStatus executeCommand ( char * jsonCommand, int commandLength, OrderManag
         atCommand [ cmdLen ] = 0;
         char * atResponse = new char [ 32 ];
         sendBleATCommand ( ble, atCommand, atResponse, BARVIS_COMMAND_SIZE );
-        ServiceStatus status ( SUCCESS, "[%s] response: [%s]", atCommand, atResponse );
+        serviceStatus -> status ( SUCCESS, "[%s] response: [%s]", atCommand, atResponse );
         delete [] atCommand;
         delete [] atResponse;
-        return status;
+        return serviceStatus;
     }
 
-    return ServiceStatus ( SUCCESS, "Nothing executed and no error occurred" );
+    return serviceStatus;
 }

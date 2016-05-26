@@ -15,7 +15,7 @@ enum PumpControllerState
     Executing
 };
 
-class PumpControl: private ShiftRegister, public IrSensorListener
+class PumpControl : private ShiftRegister, public IrSensorListener
 {
     private:
 

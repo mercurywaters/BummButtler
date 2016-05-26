@@ -119,7 +119,7 @@ void PumpControl::resumePumps ()
 {
     if ( pumpControllerState == Paused )
     {
-        enableOutput();
+        enableOutput ();
         pumpControllerState = Executing;
     }
 }
